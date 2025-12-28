@@ -1,0 +1,58 @@
+name: Build and Deploy to Beta
+on:
+  workflow_dispatch: # Pouze ruční spuštění přes tlačítko v Actions
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Work Branch
+        uses: actions/checkout@v4
+        with:
+          ref: work # Bere data z pracovní větve
+
+      - name: Assemble Script
+        shell: pwsh
+        run: |
+          # Funkce pro vytvoření PowerShell hashtable z JSONu
+          function Get-PSHash($path) {
+              if (!(Test-Path $path)) { return "" }
+              $json = Get-Content $path -Raw | ConvertFrom-Json
+              $lines = foreach ($prop in $json.psobject.Properties) {
+                  "    `"$($prop.Name)`" = `"$($prop.Value)`""
+              }
+              return $lines -join "`r`n"
+          }
+
+          # Načtení dat z JSONů
+          $ubi = Get-PSHash "data/ubisoft.json"
+          $blizz = Get-PSHash "data/blizzard.json"
+          
+          # Vygenerování verze podle aktuálního času
+          $version = Get-Date -Format "yyyy.MM.dd.HHmm"
+          
+          # Načtení šablony a nahrazení značek
+          $content = Get-Content "src/template.ps1" -Raw
+          $content = $content.Replace("#INSERT_UBI_GAMES#", $ubi)
+          $content = $content.Replace("#INSERT_BLIZZ_GAMES#", $blizz)
+          $content = $content.Replace("#BUILD_VERSION#", $version)
+          
+          # Uložení finálního skriptu
+          $content | Set-Content "LauncherAutoClose.ps1" -Encoding utf8
+
+      - name: Deploy to Beta Branch
+        shell: pwsh
+        run: |
+          git config --global user.name "Fargotroniac"
+          git config --global user.email "Fargotroniac@icloud.com"
+          
+          # Přepnutí na větev beta (vytvoří ji, pokud neexistuje)
+          git fetch origin beta
+          git checkout beta -f || git checkout -b beta
+          
+          # Nahrání skriptu do bety
+          git add LauncherAutoClose.ps1
+          git commit -m "Beta Build - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+          git push origin beta -f
