@@ -1,4 +1,4 @@
-# VERSION: 2025.12.28.1049
+# VERSION: 2025.12.28.1056
 # Tento skript je generován automaticky z větvě develop. Neupravujte jej přímo v main.
 
 # --- 1. ZÁKLADNÍ CESTY A PŘÍPRAVA ----------------------------------------------
@@ -80,11 +80,11 @@ if ($lastUpdate -ne $today) {
 
 # --- 4. DATA (ROZDĚLENÉ SEZNAMY) ---
 $UbiGamesList = @{
-#INSERT_UBI_GAMES#
+    "ACU" = "Any"
 }
 
 $BlizzGamesList = @{
-#INSERT_BLIZZ_GAMES#
+
 }
 
 $LauncherDefs = @{
