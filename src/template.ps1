@@ -1,6 +1,7 @@
 # VERSION: #BUILD_VERSION#
 # ==============================================================================
 # Launcher Auto Close (LAC)
+# Created by Fargotroniac
 # ==============================================================================
 
 # --- 1. ZÁKLADNÍ CESTY A PŘÍPRAVA ----------------------------------------------
@@ -33,9 +34,42 @@ try {
 
 # --- 3. AUTO-UPDATE SYSTÉM ----------------------------------------------------
 function Validate-ScriptContent {
-    param([string]$content)
-    if (-not $content -or $content.Length -lt 1000) { return $false }
-    if ($content -notmatch '# VERSION:' -or $content -notmatch 'function Watch-Launcher') { return $false }
+    param(
+        [string]$content
+    )
+
+    # 1) Základní kontrola
+    if (-not $content) { return $false }
+    if ($content.Length -lt 3000) { return $false }
+
+    # 2) Kontrola HTML (Zůstává stejná)
+    if ($content -match "<html" -or $content -match "<body" -or $content -match "<!DOCTYPE html") {
+        return $false
+    }
+
+    # 3) Kontrola verze
+    $versionLine = ($content -split "`r?`n") | Where-Object { $_ -match "^# VERSION:" }
+    if (-not $versionLine) { return $false }
+    if ($versionLine -notmatch "^# VERSION:\s\d{4}\.\d{2}\.\d{2}\.\d{4}$") { return $false }
+
+    # 4) Kontrola funkcí
+    if ($content -notmatch "Try-Update") { return $false }
+    if ($content -notmatch "Validate-ScriptContent") { return $false }
+    if ($content -notmatch "Get-VersionFromContent") { return $false }
+
+    # 5) Kontrola hlavní funkce
+    if ($content -notmatch "function\s+Watch-Launcher") { return $false }
+
+    # 6) Kontrola seznamů
+    if ($content -notmatch "\$ubiGamesList") { return $false }
+
+    # 7) Kontrola spouštění
+    if ($content -notmatch "Watch-Launcher") { return $false }
+
+    # 8) Kontrola configu
+    if ($content -notmatch "\$configFile") { return $false }
+    if ($content -notmatch "ConvertFrom-Json") { return $false }
+
     return $true
 }
 
