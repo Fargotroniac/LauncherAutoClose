@@ -84,7 +84,7 @@ if ($lastUpdate -ne $today) {
 # --- 4. DATA: SEZNAMY HER (Zde může být až 2000+ her) -------------------------
 # Udržujeme v hashtable @{} pro bleskové vyhledávání O(1)
 $ubiGamesList = @{
-    "ACU"                  = "Assassin's Creed Unity"
+    "ACU"                  = "Any"
 }
 
 #$blizzGamesList = @{
@@ -114,14 +114,11 @@ function Watch-Launcher {
 
     $registryPath = "HKLM:\SOFTWARE\LauncherAutoClose"
     
-# Robustnější detekce (bere v úvahu i chybějící metadata)
     $activeGame = $AllProcesses | Where-Object { 
         $GamesList.ContainsKey($_.Name) -and (
-            # Buď sedí Company/Description
-            ($null -ne $_.Company -and $_.Company -match $GamesList[$_.Name]) -or 
-            ($null -ne $_.Description -and $_.Description -match $GamesList[$_.Name]) -or
-            # Nebo je v seznamu her nastaveno jen "Any", což znamená "neřeš metadata"
-            ($GamesList[$_.Name] -eq "Any")
+            ($GamesList[$_.Name] -eq "Any") -or 
+            ($null -ne $_.Company -and $_.Company -match [regex]::Escape($GamesList[$_.Name])) -or 
+            ($null -ne $_.Description -and $_.Description -match [regex]::Escape($GamesList[$_.Name]))
         )
     } | Select-Object -First 1
 
@@ -145,7 +142,7 @@ function Watch-Launcher {
                 if ($procsToClose) {
                     $procsToClose | ForEach-Object { $_.CloseMainWindow() | Out-Null }
                     Start-Sleep -Seconds 30
-                    $procsToClose | Stop-Process -Force -ErrorAction SilentlyContinue
+                    $procsToClose | Where-Object { -not $_.HasExited } | Stop-Process -Force -ErrorAction SilentlyContinue
                 }
                 Remove-ItemProperty $regKey -Name "IsPlaying" -ErrorAction SilentlyContinue
             }
