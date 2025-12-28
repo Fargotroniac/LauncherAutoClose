@@ -54,10 +54,17 @@ jobs:
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
           
-          # Prepnutí do main a vložení souboru
-          git checkout main
-          git checkout work -- LauncherAutoClose.ps1
+          # 1. Uložíme si vygenerovaný skript do dočasné paměti
+          $generatedScript = Get-Content "LauncherAutoClose.ps1" -Raw
           
+          # 2. Přepneme se do main (a vynutíme si to)
+          git fetch origin main
+          git checkout main -f
+          
+          # 3. Vložíme tam ten nový skript (přepíšeme starý)
+          $generatedScript | Set-Content "LauncherAutoClose.ps1" -Encoding utf8
+          
+          # 4. Odešleme změny
           git add LauncherAutoClose.ps1
-          git commit -m "Auto-build $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
-          git push origin main
+          git commit -m "Automated build $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+          git push origin main -f
