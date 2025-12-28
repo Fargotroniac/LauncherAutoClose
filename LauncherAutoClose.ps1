@@ -1,5 +1,7 @@
-# VERSION: 2025.12.28.1056
-# Tento skript je generován automaticky z větvě develop. Neupravujte jej přímo v main.
+# VERSION: 2025.12.28.1950
+# ==============================================================================
+# Launcher Auto Close (LAC)
+# ==============================================================================
 
 # --- 1. ZÁKLADNÍ CESTY A PŘÍPRAVA ----------------------------------------------
 $baseDir = "C:\ProgramData\LauncherAutoClose"
@@ -26,7 +28,7 @@ if (-not (Test-Path $configFile)) {
 try {
     $config = Get-Content $configFile -Raw | ConvertFrom-Json
 } catch {
-    $config = $defaultConfig 
+    $config = $defaultConfig # Nouzový režim při poškození JSONu
 }
 
 # --- 3. AUTO-UPDATE SYSTÉM ----------------------------------------------------
@@ -67,43 +69,45 @@ function Try-Update {
     } catch { return $false }
 }
 
+# Kontrola updatu jednou denně
 $today = (Get-Date).ToString("yyyy-MM-dd")
 $lastUpdate = if (Test-Path $updateStamp) { (Get-Content $updateStamp).Trim() } else { "" }
 
 if ($lastUpdate -ne $today) {
     if (Try-Update) {
         Set-Content $updateStamp $today
-        return 
+        return # Restart při příštím spuštění plánovače s novou verzí
     }
     Set-Content $updateStamp $today
 }
 
-# --- 4. DATA (ROZDĚLENÉ SEZNAMY) ---
-$UbiGamesList = @{
-    "ACU" = "Any"
+# --- 4. DATA: SEZNAMY HER (Zde může být až 2000+ her) -------------------------
+# Udržujeme v hashtable @{} pro bleskové vyhledávání O(1)
+$ubiGamesList = @{
+    "ACU"                  = "Any"
 }
 
-$BlizzGamesList = @{
-
+$blizzGamesList = @{
+    "Diablo IV"           = "Blizzard"
+    "Overwatch"           = "Blizzard"
 }
 
-$LauncherDefs = @{
-    "UbisoftConnect" = "Ubisoft|Ubisoft Entertainment"
-    "upc" = "Ubisoft|Ubisoft Entertainment"
-    "UplayWebHelper" = "Ubisoft|Ubisoft Entertainment"
-    "Battle.net" = "Blizzard Entertainment"
-    "Agent" = "Blizzard Entertainment"
+$ubiLauncherDefs   = @{
+    "upc"                    = "Ubisoft"
+    "UbisoftConnect"         = "Ubisoft"
+}
+$blizzLauncherDefs = @{
+    "Battle.net"             = "Blizzard"
 }
 
-# --- 5. HLAVNÍ VÝKONNÁ FUNKCE ---
+# --- 5. HLAVNÍ VÝKONNÁ FUNKCE --------------------------------------------------
 function Watch-Launcher {
     param (
         [string]$LauncherName,
         [Hashtable]$GamesList,
         [Hashtable]$LauncherList,
         [Object]$Settings,
-        [Object]$AllProcesses,
-        [string]$DefaultSignature  # "Ubisoft" nebo "Blizzard"
+        [Object]$AllProcesses
     )
 
     if (-not $Settings.Enabled) { return }
@@ -112,34 +116,43 @@ function Watch-Launcher {
     
     $activeGame = $AllProcesses | Where-Object { 
         $GamesList.ContainsKey($_.Name) -and (
-            $rule = $GamesList[$_.Name]
-            if ($rule -eq "Any") {
-                # Pokud je v JSONu "Any", hledáme v podpisu výchozí jméno firmy
-                ($null -ne $_.Company -and $_.Company -match $DefaultSignature) -or 
-                ($null -ne $_.Description -and $_.Description -match $DefaultSignature)
-            } else {
-                # Jinak hledáme konkrétní slovo z JSONu (třeba "Assassin")
-                ($null -ne $_.Company -and $_.Company -match $rule) -or 
-                ($null -ne $_.Description -and $_.Description -match $rule)
-            }
+            ($GamesList[$_.Name] -eq "Any") -or 
+            ($null -ne $_.Company -and $_.Company -match [regex]::Escape($GamesList[$_.Name])) -or 
+            ($null -ne $_.Description -and $_.Description -match [regex]::Escape($GamesList[$_.Name]))
         )
     } | Select-Object -First 1
 
-    # ... (zbytek logiky se zápisem do registru a zavíráním zůstává stejný) ...
     if ($activeGame) {
         if (-not (Test-Path "$registryPath\$LauncherName")) { New-Item "$registryPath\$LauncherName" -Force | Out-Null }
         Set-ItemProperty "$registryPath\$LauncherName" -Name "IsPlaying" -Value 1 -Force
     } 
     else {
-        # ... logika ukončení (start-sleep atd.) ...
+        $regKey = "$registryPath\$LauncherName"
+        if (Test-Path $regKey) {
+            $val = Get-ItemProperty $regKey -Name "IsPlaying" -ErrorAction SilentlyContinue
+            if ($val -and $val.IsPlaying -eq 1) {
+                
+                Start-Sleep -Seconds $Settings.WaitTime
+                
+                # Znovu načteme aktuální stav procesů pro ukončení launcheru
+                $procsToClose = Get-Process | Where-Object { 
+                    $LauncherList.ContainsKey($_.Name) -and ($_.Company -match $LauncherList[$_.Name])
+                } -ErrorAction SilentlyContinue
+                
+                if ($procsToClose) {
+                    $procsToClose | ForEach-Object { $_.CloseMainWindow() | Out-Null }
+                    Start-Sleep -Seconds 30
+                    $procsToClose | Where-Object { -not $_.HasExited } | Stop-Process -Force -ErrorAction SilentlyContinue
+                }
+                Remove-ItemProperty $regKey -Name "IsPlaying" -ErrorAction SilentlyContinue
+            }
+        }
     }
 }
 
-# --- 6. SPUŠTĚNÍ ---
+# --- 6. VÝKONNOSTNÍ OPTIMALIZACE A SPUŠTĚNÍ ------------------------------------
+# Načteme všechny běžící procesy jednou pro všechny volání funkce
 $running = Get-Process | Select-Object Name, Company, Description
 
-# Tady voláme funkci pro každý launcher s jeho vlastním seznamem
-Watch-Launcher -LauncherName "Ubisoft" -GamesList $UbiGamesList -LauncherList $LauncherDefs -Settings $config.Ubisoft -AllProcesses $running -DefaultSignature "Ubisoft"
-Watch-Launcher -LauncherName "Blizzard" -GamesList $BlizzGamesList -LauncherList $LauncherDefs -Settings $config.Blizzard -AllProcesses $running -DefaultSignature "Blizzard"
-
-
+Watch-Launcher -LauncherName "Ubisoft" -GamesList $ubiGamesList -LauncherList $ubiLauncherDefs -Settings $config.Ubisoft -AllProcesses $running
+Watch-Launcher -LauncherName "Blizzard" -GamesList $blizzGamesList -LauncherList $blizzLauncherDefs -Settings $config.Blizzard -AllProcesses $running
