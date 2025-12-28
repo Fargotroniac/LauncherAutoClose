@@ -43,9 +43,7 @@ function Validate-ScriptContent {
     if ($content.Length -lt 3000) { return $false }
 
     # 2) Kontrola HTML (Zůstává stejná)
-    if ($content -match "<html" -or $content -match "<body" -or $content -match "<!DOCTYPE html") {
-        return $false
-    }
+    if ($content -match "<html" -or $content -match "<body" -or $content -match "<!DOCTYPE html") { return $false }
 
     # 3) Kontrola verze
     $versionLine = ($content -split "`r?`n") | Where-Object { $_ -match "^# VERSION:" }
@@ -114,22 +112,22 @@ if ($lastUpdate -ne $today) {
     Set-Content $updateStamp $today
 }
 
-# --- 4. DATA: SEZNAMY HER (Doplněno robotem) -------------------------
+# --- 4. DATA -------------------------
+# --- Ubisoft ---
 $ubiGamesList = @{
 #INSERT_UBI_GAMES#
 }
 
+$ubiLauncherDefs   = @{
+#INSERT_UBI_LAUNCHER#
+}
+# --- Blizzard ---
 $blizzGamesList = @{
 #INSERT_BLIZZ_GAMES#
 }
 
-$ubiLauncherDefs   = @{
-    "upc"            = "Ubisoft"
-    "UbisoftConnect" = "Ubisoft"
-}
-
 $blizzLauncherDefs = @{
-    "Battle.net"     = "Blizzard"
+#INSERT_BLIZZ_LAUNCHER#
 }
 
 # --- 5. HLAVNÍ VÝKONNÁ FUNKCE --------------------------------------------------
@@ -137,7 +135,7 @@ function Watch-Launcher {
     param (
         [string]$LauncherName,
         [Hashtable]$GamesList,
-        [Hashtable]$LauncherList,
+        [Object]$LauncherData, 
         [Object]$Settings,
         [Object]$AllProcesses
     )
@@ -146,12 +144,11 @@ function Watch-Launcher {
 
     $registryPath = "HKLM:\SOFTWARE\LauncherAutoClose"
     
-    # Detekce hry s využitím tvé logiky (Name + Any/Company/Description)
+    # 1. Detekce hry
     $activeGame = $AllProcesses | Where-Object { 
         $GamesList.ContainsKey($_.Name) -and (
             ($GamesList[$_.Name] -eq "Any") -or 
-            ($null -ne $_.Company -and $_.Company -match [regex]::Escape($GamesList[$_.Name])) -or 
-            ($null -ne $_.Description -and $_.Description -match [regex]::Escape($GamesList[$_.Name]))
+            ($null -ne $_.Company -and $_.Company -match [regex]::Escape($GamesList[$_.Name]))
         )
     } | Select-Object -First 1
 
@@ -161,23 +158,22 @@ function Watch-Launcher {
     } 
     else {
         $regKey = "$registryPath\$LauncherName"
-        if (Test-Path $regKey) {
-            $val = Get-ItemProperty $regKey -Name "IsPlaying" -ErrorAction SilentlyContinue
-            if ($val -and $val.IsPlaying -eq 1) {
-                
-                Start-Sleep -Seconds $Settings.WaitTime
-                
-                $procsToClose = Get-Process | Where-Object { 
-                    $LauncherList.ContainsKey($_.Name) -and ($_.Company -match $LauncherList[$_.Name])
-                } -ErrorAction SilentlyContinue
-                
-                if ($procsToClose) {
-                    $procsToClose | ForEach-Object { $_.CloseMainWindow() | Out-Null }
-                    Start-Sleep -Seconds 30
-                    $procsToClose | Where-Object { -not $_.HasExited } | Stop-Process -Force -ErrorAction SilentlyContinue
-                }
-                Remove-ItemProperty $regKey -Name "IsPlaying" -ErrorAction SilentlyContinue
+        $val = Get-ItemProperty $regKey -Name "IsPlaying" -ErrorAction SilentlyContinue
+        if ($val -and $val.IsPlaying -eq 1) {
+            
+            Start-Sleep -Seconds $Settings.WaitTime
+            
+            $procsToClose = Get-Process | Where-Object { 
+                $LauncherData.Processes -contains $_.Name -and 
+                ($LauncherData.Companies -contains $_.Company)
+            } -ErrorAction SilentlyContinue
+            
+            if ($procsToClose) {
+                $procsToClose | ForEach-Object { $_.CloseMainWindow() | Out-Null }
+                Start-Sleep -Seconds 30
+                $procsToClose | Where-Object { -not $_.HasExited } | Stop-Process -Force -ErrorAction SilentlyContinue
             }
+            Remove-ItemProperty $regKey -Name "IsPlaying" -ErrorAction SilentlyContinue
         }
     }
 }

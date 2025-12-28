@@ -1,5 +1,9 @@
 {
-  "ACU": "Any",
-  "FarCry6": "Ubisoft",
-  "WatchDogs": "Ubisoft"
+  "Launcher": {
+    "Companies": ["Ubisoft", "Ubisoft Entertainment"],
+    "Processes": ["UbisoftConnect", "upc", "UplayWebHelper"]
+  },
+  "Games": {
+    "ACU": "Any"
+  }
 }

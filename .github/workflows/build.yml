@@ -1,4 +1,4 @@
-name: Build and Deploy to Beta
+name: Sestavení pro testování
 on:
   workflow_dispatch:
 
@@ -16,41 +16,52 @@ jobs:
       - name: Assemble Script
         shell: pwsh
         run: |
-          function Get-PSHash($path) {
-              if (!(Test-Path $path)) { return "" }
-              $json = Get-Content $path -Raw | ConvertFrom-Json
-              $lines = foreach ($prop in $json.psobject.Properties) {
+          function Get-PSHash($data) {
+              if ($null -eq $data) { return "" }
+              $lines = foreach ($prop in $data.psobject.Properties) {
                   "    `"$($prop.Name)`" = `"$($prop.Value)`""
               }
               return $lines -join "`r`n"
           }
 
-          $ubi = Get-PSHash "data/ubisoft.json"
-          $blizz = Get-PSHash "data/blizzard.json"
+          function Get-PSObject($data) {
+              if ($null -eq $data) { return " @{ Companies = @(); Processes = @() }" }
+              $companies = ($data.Companies | ForEach-Object { "`"$_`"" }) -join ", "
+              $processes = ($data.Processes | ForEach-Object { "`"$_`"" }) -join ", "
+              return "[PSCustomObject]@{ Companies = @($companies); Processes = @($processes) }"
+          }
+
+          $ubiJson = Get-Content "data/ubisoft.json" -Raw | ConvertFrom-Json
+          $blizzJson = Get-Content "data/blizzard.json" -Raw | ConvertFrom-Json
+
+          $ubiGames = Get-PSHash $ubiJson.Games
+          $ubiLauncher = Get-PSObject $ubiJson.Launcher
+          
+          $blizzGames = Get-PSHash $blizzJson.Games
+          $blizzLauncher = Get-PSObject $blizzJson.Launcher
+          
           $version = Get-Date -Format "yyyy.MM.dd.HHmm"
+          $template = Get-Content "src/template.ps1" -Raw
+
+          $content = $template.Replace("#BUILD_VERSION#", $version)
+          $content = $content.Replace("#INSERT_UBI_GAMES#", $ubiGames)
+          $content = $content.Replace("#INSERT_UBI_LAUNCHER#", $ubiLauncher)
+          $content = $content.Replace("#INSERT_BLIZZ_GAMES#", $blizzGames)
+          $content = $content.Replace("#INSERT_BLIZZ_LAUNCHER#", $blizzLauncher)
           
-          $content = Get-Content "src/template.ps1" -Raw
-          $content = $content.Replace("#INSERT_UBI_GAMES#", $ubi)
-          $content = $content.Replace("#INSERT_BLIZZ_GAMES#", $blizz)
-          $content = $content.Replace("#BUILD_VERSION#", $version)
-          
-          # Uložíme si skript do dočasné složky mimo git strukturu
           $content | Set-Content "..\LauncherAutoClose_generated.ps1" -Encoding utf8
 
-      - name: Deploy to Beta Branch
+      - name: Sestavení pro testování
         shell: pwsh
         run: |
           git config --global user.name "Fargotroniac"
           git config --global user.email "Fargotroniac@icloud.com"
           
-          # Přepnutí na betu
           git fetch origin beta
           git checkout beta -f || git checkout -b beta
           
-          # Přesuneme vygenerovaný soubor z dočasného umístění sem
           Move-Item "..\LauncherAutoClose_generated.ps1" "LauncherAutoClose.ps1" -Force
           
-          # Teď už Git uvidí změnu
           git add LauncherAutoClose.ps1
           git commit -m "Beta Build - $(Get-Date -Format 'yyyy-MM-dd HH:mm')" || exit 0
           git push origin beta -f
