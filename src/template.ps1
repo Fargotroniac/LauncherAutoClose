@@ -13,7 +13,7 @@ $configFile      = Join-Path $baseDir "config.json"
 $updateStamp     = Join-Path $baseDir "last_update.txt"
 $localScriptPath = $MyInvocation.MyCommand.Path
 $backupPath      = "$localScriptPath.bak"
-$remoteScriptUrl = "https://raw.githubusercontent.com/Fargotroniac/LauncherAutoClose/refs/heads/main/LauncherAutoClose.ps1"
+$remoteScriptUrl = "https://raw.githubusercontent.com/Fargotroniac/LauncherAutoClose/main/LauncherAutoClose.ps1"
 
 # --- 2. NAČTENÍ / VYTVOŘENÍ KONFIGURACE (JSON) ---------------------------------
 $defaultConfig = @{
