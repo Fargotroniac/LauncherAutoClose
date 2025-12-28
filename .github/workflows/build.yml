@@ -1,7 +1,18 @@
-- name: Process Multiple JSONs
+name: LAC Build Engine
+on:
+  push:
+    branches: [ develop ]
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Process JSON Data
         shell: pwsh
         run: |
-          # 1. Načtení Launcherů
+          # 1. Načtení Launcherů (Technické definice)
           $launchersConfig = Get-Content "data/launchers.json" | ConvertFrom-Json
           $lLines = @()
           foreach ($l in $launchersConfig) {
@@ -9,26 +20,38 @@
               foreach ($p in $l.Processes) { $lLines += "    `"$p`" = `"$pattern`"" }
           }
           
-          # 2. Načtení Her (spojíme více souborů do jedné hashtable)
-          $ubiGames = Get-Content "data/ubisoft.json" | ConvertFrom-Json
-          $blizzGames = Get-Content "data/blizzard.json" | ConvertFrom-Json
-          
+          # 2. Načtení Her (Jeden Master soubor pro vše)
+          $games = Get-Content "data/games.json" | ConvertFrom-Json
           $gLines = @()
-          # Zpracování Ubisoft her
-          foreach ($prop in $ubiGames.psobject.Properties) {
-              $gLines += "    `"$($prop.Name)`" = `"$($prop.Value)`""
-          }
-          # Zpracování Blizzard her
-          foreach ($prop in $blizzGames.psobject.Properties) {
+          foreach ($prop in $games.psobject.Properties) {
               $gLines += "    `"$($prop.Name)`" = `"$($prop.Value)`""
           }
 
-          # 3. Sestavení ze šablony
+          # 3. Sestavení výsledného skriptu ze šablony
+          if (-not (Test-Path "src/template.ps1")) { throw "Sablona src/template.ps1 nebyla nalezena!" }
           $template = Get-Content "src/template.ps1" -Raw
+          
+          # Vložení dat do značek v šabloně
           $template = $template.Replace("#INSERT_LAUNCHERS#", ($lLines -join "`r`n"))
           $template = $template.Replace("#INSERT_GAMES#", ($gLines -join "`r`n"))
           
-          # Verze a uložení
+          # Automatická aktualizace verze podle času sestavení
           $v = Get-Date -Format "yyyy.MM.dd.HHmm"
           $template = $template -replace '0.0.0.0', $v
+          
+          # Uložení hotového skriptu
           $template | Set-Content "LauncherAutoClose.ps1" -Encoding utf8
+
+      - name: Deploy to Main
+        shell: pwsh
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git fetch origin main
+          git checkout main
+          
+          # Překopírování vygenerovaného skriptu a jeho odeslání do main
+          mv LauncherAutoClose.ps1 LauncherAutoClose.ps1 -Force
+          git add LauncherAutoClose.ps1
+          git commit -m "Automated build $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+          git push origin main
