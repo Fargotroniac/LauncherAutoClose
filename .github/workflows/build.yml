@@ -1,6 +1,12 @@
 name: Sestavení pro testování
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - work  
+    paths:
+      - 'data/**'      
+      - 'src/**'       
+      - '.github/workflows/build.yml'
 
 jobs:
   build:

@@ -116,6 +116,7 @@ if ($lastUpdate -ne $today) {
 $ubiGamesList = @{
 #INSERT_UBI_GAMES#
 }
+
 $ubiLauncherData = @{
 #INSERT_UBI_LAUNCHER#
 }
@@ -123,6 +124,7 @@ $ubiLauncherData = @{
 $blizzGamesList = @{
 #INSERT_BLIZZ_GAMES#
 }
+
 $blizzLauncherData = @{
 #INSERT_BLIZZ_LAUNCHER#
 }
