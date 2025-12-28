@@ -107,12 +107,8 @@ function Watch-Launcher {
     # Hledáme, zda běží nějaká hra, která patří tomuto launcheru
     $activeGame = $AllProcesses | Where-Object { 
         $GamesList.ContainsKey($_.Name) -and (
-            # Tady kontrolujeme, zda hra patří pod aktuálně sledovaný launcher (např. "Ubisoft")
-            $GamesList[$_.Name] -eq $LauncherName -or $GamesList[$_.Name] -eq "Any"
-        ) -and (
-            ($GamesList[$_.Name] -eq "Any") -or 
-            ($null -ne $_.Company -and $_.Company -match [regex]::Escape($GamesList[$_.Name])) -or 
-            ($null -ne $_.Description -and $_.Description -match [regex]::Escape($GamesList[$_.Name]))
+            # Kontrola: Patří tato hra pod aktuálně spuštěný launcher?
+            ($GamesList[$_.Name] -match $LauncherName) -or ($GamesList[$_.Name] -eq "Any")
         )
     } | Select-Object -First 1
 
