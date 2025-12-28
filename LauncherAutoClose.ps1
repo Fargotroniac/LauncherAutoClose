@@ -1,4 +1,4 @@
-# VERSION: 2025.12.28.2105
+# VERSION: 2025.12.28.2113
 # ==============================================================================
 # Launcher Auto Close (LAC)
 # Created by Fargotroniac
@@ -29,7 +29,8 @@ if (-not (Test-Path $configFile)) {
 try {
     $config = Get-Content $configFile -Raw | ConvertFrom-Json
     if (-not $config.Update) { 
-        $config | Add-Member -MemberType NoteProperty -Name "Update" -Value $defaultConfig.Update 
+        $config | Add-Member -MemberType NoteProperty -Name "Update" -Value $defaultConfig.Update
+        $config | ConvertTo-Json | Set-Content $configFile
     }
 } catch {
     $config = $defaultConfig 
