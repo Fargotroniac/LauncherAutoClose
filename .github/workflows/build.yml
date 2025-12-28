@@ -16,6 +16,7 @@ jobs:
       - name: Assemble Script
         shell: pwsh
         run: |
+          # Funkce pro vnitřek hashtabulky (Klíč = Hodnota)
           function Get-PSHash($data) {
               if ($null -eq $data) { return "" }
               $lines = foreach ($prop in $data.psobject.Properties) {
@@ -24,30 +25,26 @@ jobs:
               return $lines -join "`r`n"
           }
 
-          function Get-PSObject($data) {
-              if ($null -eq $data) { return " @{ Companies = @(); Processes = @() }" }
-              $companies = ($data.Companies | ForEach-Object { "`"$_`"" }) -join ", "
-              $processes = ($data.Processes | ForEach-Object { "`"$_`"" }) -join ", "
-              return "[PSCustomObject]@{ Companies = @($companies); Processes = @($processes) }"
+          # Speciální funkce pro vnitřek hashtabulky s poli (Companies/Processes)
+          function Get-PSLauncherHash($data) {
+              if ($null -eq $data) { return "    Companies = @(); Processes = @()" }
+              $comps = ($data.Companies | ForEach-Object { "`"$_`"" }) -join ", "
+              $procs = ($data.Processes | ForEach-Object { "`"$_`"" }) -join ", "
+              return "    Companies = @($comps);`r`n    Processes = @($procs)"
           }
 
           $ubiJson = Get-Content "data/ubisoft.json" -Raw | ConvertFrom-Json
           $blizzJson = Get-Content "data/blizzard.json" -Raw | ConvertFrom-Json
 
-          $ubiGames = Get-PSHash $ubiJson.Games
-          $ubiLauncher = Get-PSObject $ubiJson.Launcher
-          
-          $blizzGames = Get-PSHash $blizzJson.Games
-          $blizzLauncher = Get-PSObject $blizzJson.Launcher
-          
-          $version = Get-Date -Format "yyyy.MM.dd.HHmm"
           $template = Get-Content "src/template.ps1" -Raw
+          $version = Get-Date -Format "yyyy.MM.dd.HHmm"
 
+          # Nahrazení značek - všimni si nových názvů funkcí
           $content = $template.Replace("#BUILD_VERSION#", $version)
-          $content = $content.Replace("#INSERT_UBI_GAMES#", $ubiGames)
-          $content = $content.Replace("#INSERT_UBI_LAUNCHER#", $ubiLauncher)
-          $content = $content.Replace("#INSERT_BLIZZ_GAMES#", $blizzGames)
-          $content = $content.Replace("#INSERT_BLIZZ_LAUNCHER#", $blizzLauncher)
+          $content = $content.Replace("#INSERT_UBI_GAMES#", (Get-PSHash $ubiJson.Games))
+          $content = $content.Replace("#INSERT_UBI_LAUNCHER#", (Get-PSLauncherHash $ubiJson.Launcher))
+          $content = $content.Replace("#INSERT_BLIZZ_GAMES#", (Get-PSHash $blizzJson.Games))
+          $content = $content.Replace("#INSERT_BLIZZ_LAUNCHER#", (Get-PSLauncherHash $blizzJson.Launcher))
           
           $content | Set-Content "..\LauncherAutoClose_generated.ps1" -Encoding utf8
 

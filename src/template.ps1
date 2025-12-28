@@ -113,29 +113,26 @@ if ($lastUpdate -ne $today) {
 }
 
 # --- 4. DATA -------------------------
-# --- Ubisoft ---
 $ubiGamesList = @{
 #INSERT_UBI_GAMES#
 }
-
-$ubiLauncherDefs   = @{
+$ubiLauncherData = @{
 #INSERT_UBI_LAUNCHER#
 }
-# --- Blizzard ---
+
 $blizzGamesList = @{
 #INSERT_BLIZZ_GAMES#
 }
-
-$blizzLauncherDefs = @{
+$blizzLauncherData = @{
 #INSERT_BLIZZ_LAUNCHER#
 }
 
-# --- 5. HLAVNÍ VÝKONNÁ FUNKCE --------------------------------------------------
+# --- 5. FUNKCE -----------------------
 function Watch-Launcher {
     param (
         [string]$LauncherName,
         [Hashtable]$GamesList,
-        [Object]$LauncherData, 
+        [Hashtable]$LData,
         [Object]$Settings,
         [Object]$AllProcesses
     )
@@ -163,9 +160,10 @@ function Watch-Launcher {
             
             Start-Sleep -Seconds $Settings.WaitTime
             
+            # Kontrola procesů launcheru (Nová logika Companies/Processes)
             $procsToClose = Get-Process | Where-Object { 
-                $LauncherData.Processes -contains $_.Name -and 
-                ($LauncherData.Companies -contains $_.Company)
+                $LData.Processes -contains $_.Name -and 
+                ($null -ne $_.Company -and ($LData.Companies -contains $_.Company))
             } -ErrorAction SilentlyContinue
             
             if ($procsToClose) {
@@ -181,5 +179,5 @@ function Watch-Launcher {
 # --- 6. SPUŠTĚNÍ ---
 $running = Get-Process | Select-Object Name, Company, Description
 
-Watch-Launcher -LauncherName "Ubisoft" -GamesList $ubiGamesList -LauncherList $ubiLauncherDefs -Settings $config.Ubisoft -AllProcesses $running
-Watch-Launcher -LauncherName "Blizzard" -GamesList $blizzGamesList -LauncherList $blizzLauncherDefs -Settings $config.Blizzard -AllProcesses $running
+Watch-Launcher -LauncherName "Ubisoft" -GamesList $ubiGamesList -LData $ubiLauncherData -Settings $config.Ubisoft -AllProcesses $running
+Watch-Launcher -LauncherName "Blizzard" -GamesList $blizzGamesList -LData $blizzLauncherData -Settings $config.Blizzard -AllProcesses $running
