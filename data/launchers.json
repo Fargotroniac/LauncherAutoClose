@@ -1,0 +1,10 @@
+[
+  {
+    "Companies": ["Ubisoft", "Ubisoft Entertainment"],
+    "Processes": ["UbisoftConnect", "upc", "UplayWebHelper"]
+  },
+  {
+    "Companies": ["Blizzard Entertainment"],
+    "Processes": ["Battle.net", "Agent"]
+  }
+]
