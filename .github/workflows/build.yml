@@ -1,6 +1,6 @@
 name: Build and Deploy to Beta
 on:
-  workflow_dispatch: # Pouze ruční spuštění přes tlačítko v Actions
+  workflow_dispatch:
 
 jobs:
   build:
@@ -11,12 +11,11 @@ jobs:
       - name: Checkout Work Branch
         uses: actions/checkout@v4
         with:
-          ref: work # Bere data z pracovní větve
+          ref: work
 
       - name: Assemble Script
         shell: pwsh
         run: |
-          # Funkce pro vytvoření PowerShell hashtable z JSONu
           function Get-PSHash($path) {
               if (!(Test-Path $path)) { return "" }
               $json = Get-Content $path -Raw | ConvertFrom-Json
@@ -26,21 +25,17 @@ jobs:
               return $lines -join "`r`n"
           }
 
-          # Načtení dat z JSONů
           $ubi = Get-PSHash "data/ubisoft.json"
           $blizz = Get-PSHash "data/blizzard.json"
-          
-          # Vygenerování verze podle aktuálního času
           $version = Get-Date -Format "yyyy.MM.dd.HHmm"
           
-          # Načtení šablony a nahrazení značek
           $content = Get-Content "src/template.ps1" -Raw
           $content = $content.Replace("#INSERT_UBI_GAMES#", $ubi)
           $content = $content.Replace("#INSERT_BLIZZ_GAMES#", $blizz)
           $content = $content.Replace("#BUILD_VERSION#", $version)
           
-          # Uložení finálního skriptu
-          $content | Set-Content "LauncherAutoClose.ps1" -Encoding utf8
+          # Uložíme si skript do dočasné složky mimo git strukturu
+          $content | Set-Content "..\LauncherAutoClose_generated.ps1" -Encoding utf8
 
       - name: Deploy to Beta Branch
         shell: pwsh
@@ -48,11 +43,14 @@ jobs:
           git config --global user.name "Fargotroniac"
           git config --global user.email "Fargotroniac@icloud.com"
           
-          # Přepnutí na větev beta (vytvoří ji, pokud neexistuje)
+          # Přepnutí na betu
           git fetch origin beta
           git checkout beta -f || git checkout -b beta
           
-          # Nahrání skriptu do bety
+          # Přesuneme vygenerovaný soubor z dočasného umístění sem
+          Move-Item "..\LauncherAutoClose_generated.ps1" "LauncherAutoClose.ps1" -Force
+          
+          # Teď už Git uvidí změnu
           git add LauncherAutoClose.ps1
-          git commit -m "Beta Build - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+          git commit -m "Beta Build - $(Get-Date -Format 'yyyy-MM-dd HH:mm')" || exit 0
           git push origin beta -f
