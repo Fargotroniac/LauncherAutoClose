@@ -14,38 +14,47 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Process JSON Data
+- name: Process JSON Data
         shell: pwsh
         run: |
-          # 1. Načtení Launcherů
-          $launchers = Get-Content "data/launchers.json" | ConvertFrom-Json
-          $lLines = foreach ($l in $launchers) {
-              $pattern = $l.Companies -join "|"
-              foreach ($p in $l.Processes) { "    `"$p`" = `"$pattern`"" }
-          }
-          
-          # 2. Načtení Ubisoft her
-          $ubi = Get-Content "data/ubisoft.json" | ConvertFrom-Json
-          $ubiLines = foreach ($prop in $ubi.psobject.Properties) { "    `"$($prop.Name)`" = `"$($prop.Value)`"" }
+          try {
+              # 1. Načtení Launcherů
+              $launchers = Get-Content "data/launchers.json" -Raw | ConvertFrom-Json -ErrorAction Stop
+              $lLines = @()
+              foreach ($l in $launchers) {
+                  $pattern = $l.Companies -join "|"
+                  foreach ($p in $l.Processes) { 
+                      $lLines += "    `"$p`" = `"$pattern`"" 
+                  }
+              }
+              
+              # 2. Načtení Ubisoft her
+              $ubi = Get-Content "data/ubisoft.json" -Raw | ConvertFrom-Json -ErrorAction Stop
+              $ubiLines = foreach ($prop in $ubi.psobject.Properties) {
+                  "    `"$($prop.Name)`" = `"$($prop.Value)`""
+              }
 
-          # 3. Načtení Blizzard her
-          $blizz = Get-Content "data/blizzard.json" | ConvertFrom-Json
-          $blizzLines = foreach ($prop in $blizz.psobject.Properties) { "    `"$($prop.Name)`" = `"$($prop.Value)`"" }
+              # 3. Načtení Blizzard her
+              $blizz = Get-Content "data/blizzard.json" -Raw | ConvertFrom-Json -ErrorAction Stop
+              $blizzLines = foreach ($prop in $blizz.psobject.Properties) {
+                  "    `"$($prop.Name)`" = `"$($prop.Value)`""
+              }
 
-          # 4. Sestavení
-          $template = Get-Content "src/template.ps1" -Raw
-          $template = $template.Replace("#INSERT_LAUNCHERS#", ($lLines -join "`r`n"))
-          $template = $template.Replace("#INSERT_UBI_GAMES#", ($ubiLines -join "`r`n"))
-          $template = $template.Replace("#INSERT_BLIZZ_GAMES#", ($blizzLines -join "`r`n"))
-          
-          $v = Get-Date -Format "yyyy.MM.dd.HHmm"
-          $template = $template -replace '0.0.0.0', $v
-          $template | Set-Content "LauncherAutoClose.ps1" -Encoding utf8
-          Write-Host "Sestaveni probehlo uspesne pro verzi $v"
+              # 4. Sestavení výsledného skriptu
+              $template = Get-Content "src/template.ps1" -Raw -ErrorAction Stop
+              $template = $template.Replace("#INSERT_LAUNCHERS#", ($lLines -join "`r`n"))
+              $template = $template.Replace("#INSERT_UBI_GAMES#", ($ubiLines -join "`r`n"))
+              $template = $template.Replace("#INSERT_BLIZZ_GAMES#", ($blizzLines -join "`r`n"))
+              
+              # Verze a uložení
+              $v = Get-Date -Format "yyyy.MM.dd.HHmm"
+              $template = $template -replace '0.0.0.0', $v
+              $template | Set-Content "LauncherAutoClose.ps1" -Encoding utf8
+              
+              Write-Host "Build uspesne dokoncen pro verzi $v"
           }
           catch {
-              Write-Error "CHYBA: Pravdepodobne mas chybu v JSONu (chybejici uvozovky nebo carka navic)."
-              Write-Error $_.Exception.Message
+              Write-Error "Chyba pri zpracovani: $($_.Exception.Message)"
               exit 1
           }
 
