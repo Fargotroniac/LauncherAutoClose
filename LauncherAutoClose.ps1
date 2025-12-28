@@ -1,4 +1,4 @@
-# VERSION: 2025.12.28.2023
+# VERSION: 2025.12.28.2040
 # ==============================================================================
 # Launcher Auto Close (LAC)
 # Created by Fargotroniac
@@ -113,29 +113,27 @@ if ($lastUpdate -ne $today) {
 }
 
 # --- 4. DATA -------------------------
-# --- Ubisoft ---
 $ubiGamesList = @{
     "ACU" = "Any"
 }
-
-$ubiLauncherDefs   = @{
-[PSCustomObject]@{ Companies = @("Ubisoft", "Ubisoft Entertainment"); Processes = @("UbisoftConnect", "upc", "UplayWebHelper") }
+$ubiLauncherData = @{
+    Companies = @("Ubisoft", "Ubisoft Entertainment");
+    Processes = @("UbisoftConnect", "upc", "UplayWebHelper")
 }
-# --- Blizzard ---
+
 $blizzGamesList = @{
 
 }
-
-$blizzLauncherDefs = @{
- @{ Companies = @(); Processes = @() }
+$blizzLauncherData = @{
+    Companies = @(); Processes = @()
 }
 
-# --- 5. HLAVNÍ VÝKONNÁ FUNKCE --------------------------------------------------
+# --- 5. FUNKCE -----------------------
 function Watch-Launcher {
     param (
         [string]$LauncherName,
         [Hashtable]$GamesList,
-        [Object]$LauncherData, 
+        [Hashtable]$LData,
         [Object]$Settings,
         [Object]$AllProcesses
     )
@@ -163,9 +161,10 @@ function Watch-Launcher {
             
             Start-Sleep -Seconds $Settings.WaitTime
             
+            # Kontrola procesů launcheru (Nová logika Companies/Processes)
             $procsToClose = Get-Process | Where-Object { 
-                $LauncherData.Processes -contains $_.Name -and 
-                ($LauncherData.Companies -contains $_.Company)
+                $LData.Processes -contains $_.Name -and 
+                ($null -ne $_.Company -and ($LData.Companies -contains $_.Company))
             } -ErrorAction SilentlyContinue
             
             if ($procsToClose) {
@@ -181,5 +180,5 @@ function Watch-Launcher {
 # --- 6. SPUŠTĚNÍ ---
 $running = Get-Process | Select-Object Name, Company, Description
 
-Watch-Launcher -LauncherName "Ubisoft" -GamesList $ubiGamesList -LauncherList $ubiLauncherDefs -Settings $config.Ubisoft -AllProcesses $running
-Watch-Launcher -LauncherName "Blizzard" -GamesList $blizzGamesList -LauncherList $blizzLauncherDefs -Settings $config.Blizzard -AllProcesses $running
+Watch-Launcher -LauncherName "Ubisoft" -GamesList $ubiGamesList -LData $ubiLauncherData -Settings $config.Ubisoft -AllProcesses $running
+Watch-Launcher -LauncherName "Blizzard" -GamesList $blizzGamesList -LData $blizzLauncherData -Settings $config.Blizzard -AllProcesses $running
