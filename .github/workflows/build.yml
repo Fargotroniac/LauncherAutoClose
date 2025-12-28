@@ -1,7 +1,7 @@
 name: LAC Build Engine
 on:
   push:
-    branches: [ develop ]
+    branches: [ work ]
 jobs:
   build:
     runs-on: windows-latest
