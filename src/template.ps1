@@ -1,5 +1,7 @@
-# VERSION: 0.0.0.0
-# Tento skript je generován automaticky z větvě develop. Neupravujte jej přímo v main.
+# VERSION: #BUILD_VERSION#
+# ==============================================================================
+# Launcher Auto Close (LAC)
+# ==============================================================================
 
 # --- 1. ZÁKLADNÍ CESTY A PŘÍPRAVA ----------------------------------------------
 $baseDir = "C:\ProgramData\LauncherAutoClose"
@@ -78,62 +80,76 @@ if ($lastUpdate -ne $today) {
     Set-Content $updateStamp $today
 }
 
-# --- 4. DATA (ROZDĚLENÉ SEZNAMY) ---
-$UbiGamesList = @{
+# --- 4. DATA: SEZNAMY HER (Doplněno robotem) -------------------------
+$ubiGamesList = @{
 #INSERT_UBI_GAMES#
 }
 
-$BlizzGamesList = @{
+$blizzGamesList = @{
 #INSERT_BLIZZ_GAMES#
 }
 
-$LauncherDefs = @{
-#INSERT_LAUNCHERS#
+$ubiLauncherDefs   = @{
+    "upc"            = "Ubisoft"
+    "UbisoftConnect" = "Ubisoft"
 }
 
-# --- 5. HLAVNÍ VÝKONNÁ FUNKCE ---
+$blizzLauncherDefs = @{
+    "Battle.net"     = "Blizzard"
+}
+
+# --- 5. HLAVNÍ VÝKONNÁ FUNKCE --------------------------------------------------
 function Watch-Launcher {
     param (
         [string]$LauncherName,
         [Hashtable]$GamesList,
         [Hashtable]$LauncherList,
         [Object]$Settings,
-        [Object]$AllProcesses,
-        [string]$DefaultSignature  # "Ubisoft" nebo "Blizzard"
+        [Object]$AllProcesses
     )
 
-    if (-not $Settings.Enabled) { return }
+    if (-not $Settings.Enabled -or $GamesList.Count -eq 0) { return }
 
     $registryPath = "HKLM:\SOFTWARE\LauncherAutoClose"
     
+    # Detekce hry s využitím tvé logiky (Name + Any/Company/Description)
     $activeGame = $AllProcesses | Where-Object { 
         $GamesList.ContainsKey($_.Name) -and (
-            $rule = $GamesList[$_.Name]
-            if ($rule -eq "Any") {
-                # Pokud je v JSONu "Any", hledáme v podpisu výchozí jméno firmy
-                ($null -ne $_.Company -and $_.Company -match $DefaultSignature) -or 
-                ($null -ne $_.Description -and $_.Description -match $DefaultSignature)
-            } else {
-                # Jinak hledáme konkrétní slovo z JSONu (třeba "Assassin")
-                ($null -ne $_.Company -and $_.Company -match $rule) -or 
-                ($null -ne $_.Description -and $_.Description -match $rule)
-            }
+            ($GamesList[$_.Name] -eq "Any") -or 
+            ($null -ne $_.Company -and $_.Company -match [regex]::Escape($GamesList[$_.Name])) -or 
+            ($null -ne $_.Description -and $_.Description -match [regex]::Escape($GamesList[$_.Name]))
         )
     } | Select-Object -First 1
 
-    # ... (zbytek logiky se zápisem do registru a zavíráním zůstává stejný) ...
     if ($activeGame) {
         if (-not (Test-Path "$registryPath\$LauncherName")) { New-Item "$registryPath\$LauncherName" -Force | Out-Null }
         Set-ItemProperty "$registryPath\$LauncherName" -Name "IsPlaying" -Value 1 -Force
     } 
     else {
-        # ... logika ukončení (start-sleep atd.) ...
+        $regKey = "$registryPath\$LauncherName"
+        if (Test-Path $regKey) {
+            $val = Get-ItemProperty $regKey -Name "IsPlaying" -ErrorAction SilentlyContinue
+            if ($val -and $val.IsPlaying -eq 1) {
+                
+                Start-Sleep -Seconds $Settings.WaitTime
+                
+                $procsToClose = Get-Process | Where-Object { 
+                    $LauncherList.ContainsKey($_.Name) -and ($_.Company -match $LauncherList[$_.Name])
+                } -ErrorAction SilentlyContinue
+                
+                if ($procsToClose) {
+                    $procsToClose | ForEach-Object { $_.CloseMainWindow() | Out-Null }
+                    Start-Sleep -Seconds 30
+                    $procsToClose | Where-Object { -not $_.HasExited } | Stop-Process -Force -ErrorAction SilentlyContinue
+                }
+                Remove-ItemProperty $regKey -Name "IsPlaying" -ErrorAction SilentlyContinue
+            }
+        }
     }
 }
 
 # --- 6. SPUŠTĚNÍ ---
 $running = Get-Process | Select-Object Name, Company, Description
 
-# Tady voláme funkci pro každý launcher s jeho vlastním seznamem
-Watch-Launcher -LauncherName "Ubisoft" -GamesList $UbiGamesList -LauncherList $LauncherDefs -Settings $config.Ubisoft -AllProcesses $running -DefaultSignature "Ubisoft"
-Watch-Launcher -LauncherName "Blizzard" -GamesList $BlizzGamesList -LauncherList $LauncherDefs -Settings $config.Blizzard -AllProcesses $running -DefaultSignature "Blizzard"
+Watch-Launcher -LauncherName "Ubisoft" -GamesList $ubiGamesList -LauncherList $ubiLauncherDefs -Settings $config.Ubisoft -AllProcesses $running
+Watch-Launcher -LauncherName "Blizzard" -GamesList $blizzGamesList -LauncherList $blizzLauncherDefs -Settings $config.Blizzard -AllProcesses $running
