@@ -1,6 +1,7 @@
-# VERSION: 2025.12.28.1950
+# VERSION: 2025.12.28.2023
 # ==============================================================================
 # Launcher Auto Close (LAC)
+# Created by Fargotroniac
 # ==============================================================================
 
 # --- 1. ZÁKLADNÍ CESTY A PŘÍPRAVA ----------------------------------------------
@@ -13,7 +14,7 @@ $configFile      = Join-Path $baseDir "config.json"
 $updateStamp     = Join-Path $baseDir "last_update.txt"
 $localScriptPath = $MyInvocation.MyCommand.Path
 $backupPath      = "$localScriptPath.bak"
-$remoteScriptUrl = "https://raw.githubusercontent.com/Fargotroniac/LauncherAutoClose/refs/heads/main/LauncherAutoClose.ps1"
+$remoteScriptUrl = "https://raw.githubusercontent.com/Fargotroniac/LauncherAutoClose/main/LauncherAutoClose.ps1"
 
 # --- 2. NAČTENÍ / VYTVOŘENÍ KONFIGURACE (JSON) ---------------------------------
 $defaultConfig = @{
@@ -28,14 +29,45 @@ if (-not (Test-Path $configFile)) {
 try {
     $config = Get-Content $configFile -Raw | ConvertFrom-Json
 } catch {
-    $config = $defaultConfig # Nouzový režim při poškození JSONu
+    $config = $defaultConfig 
 }
 
 # --- 3. AUTO-UPDATE SYSTÉM ----------------------------------------------------
 function Validate-ScriptContent {
-    param([string]$content)
-    if (-not $content -or $content.Length -lt 1000) { return $false }
-    if ($content -notmatch '# VERSION:' -or $content -notmatch 'function Watch-Launcher') { return $false }
+    param(
+        [string]$content
+    )
+
+    # 1) Základní kontrola
+    if (-not $content) { return $false }
+    if ($content.Length -lt 3000) { return $false }
+
+    # 2) Kontrola HTML (Zůstává stejná)
+    if ($content -match "<html" -or $content -match "<body" -or $content -match "<!DOCTYPE html") { return $false }
+
+    # 3) Kontrola verze
+    $versionLine = ($content -split "`r?`n") | Where-Object { $_ -match "^# VERSION:" }
+    if (-not $versionLine) { return $false }
+    if ($versionLine -notmatch "^# VERSION:\s\d{4}\.\d{2}\.\d{2}\.\d{4}$") { return $false }
+
+    # 4) Kontrola funkcí
+    if ($content -notmatch "Try-Update") { return $false }
+    if ($content -notmatch "Validate-ScriptContent") { return $false }
+    if ($content -notmatch "Get-VersionFromContent") { return $false }
+
+    # 5) Kontrola hlavní funkce
+    if ($content -notmatch "function\s+Watch-Launcher") { return $false }
+
+    # 6) Kontrola seznamů
+    if ($content -notmatch "\$ubiGamesList") { return $false }
+
+    # 7) Kontrola spouštění
+    if ($content -notmatch "Watch-Launcher") { return $false }
+
+    # 8) Kontrola configu
+    if ($content -notmatch "\$configFile") { return $false }
+    if ($content -notmatch "ConvertFrom-Json") { return $false }
+
     return $true
 }
 
@@ -69,35 +101,33 @@ function Try-Update {
     } catch { return $false }
 }
 
-# Kontrola updatu jednou denně
 $today = (Get-Date).ToString("yyyy-MM-dd")
 $lastUpdate = if (Test-Path $updateStamp) { (Get-Content $updateStamp).Trim() } else { "" }
 
 if ($lastUpdate -ne $today) {
     if (Try-Update) {
         Set-Content $updateStamp $today
-        return # Restart při příštím spuštění plánovače s novou verzí
+        return 
     }
     Set-Content $updateStamp $today
 }
 
-# --- 4. DATA: SEZNAMY HER (Zde může být až 2000+ her) -------------------------
-# Udržujeme v hashtable @{} pro bleskové vyhledávání O(1)
+# --- 4. DATA -------------------------
+# --- Ubisoft ---
 $ubiGamesList = @{
-    "ACU"                  = "Any"
-}
-
-$blizzGamesList = @{
-    "Diablo IV"           = "Blizzard"
-    "Overwatch"           = "Blizzard"
+    "ACU" = "Any"
 }
 
 $ubiLauncherDefs   = @{
-    "upc"                    = "Ubisoft"
-    "UbisoftConnect"         = "Ubisoft"
+[PSCustomObject]@{ Companies = @("Ubisoft", "Ubisoft Entertainment"); Processes = @("UbisoftConnect", "upc", "UplayWebHelper") }
 }
+# --- Blizzard ---
+$blizzGamesList = @{
+
+}
+
 $blizzLauncherDefs = @{
-    "Battle.net"             = "Blizzard"
+ @{ Companies = @(); Processes = @() }
 }
 
 # --- 5. HLAVNÍ VÝKONNÁ FUNKCE --------------------------------------------------
@@ -105,20 +135,20 @@ function Watch-Launcher {
     param (
         [string]$LauncherName,
         [Hashtable]$GamesList,
-        [Hashtable]$LauncherList,
+        [Object]$LauncherData, 
         [Object]$Settings,
         [Object]$AllProcesses
     )
 
-    if (-not $Settings.Enabled) { return }
+    if (-not $Settings.Enabled -or $GamesList.Count -eq 0) { return }
 
     $registryPath = "HKLM:\SOFTWARE\LauncherAutoClose"
     
+    # 1. Detekce hry
     $activeGame = $AllProcesses | Where-Object { 
         $GamesList.ContainsKey($_.Name) -and (
             ($GamesList[$_.Name] -eq "Any") -or 
-            ($null -ne $_.Company -and $_.Company -match [regex]::Escape($GamesList[$_.Name])) -or 
-            ($null -ne $_.Description -and $_.Description -match [regex]::Escape($GamesList[$_.Name]))
+            ($null -ne $_.Company -and $_.Company -match [regex]::Escape($GamesList[$_.Name]))
         )
     } | Select-Object -First 1
 
@@ -128,30 +158,27 @@ function Watch-Launcher {
     } 
     else {
         $regKey = "$registryPath\$LauncherName"
-        if (Test-Path $regKey) {
-            $val = Get-ItemProperty $regKey -Name "IsPlaying" -ErrorAction SilentlyContinue
-            if ($val -and $val.IsPlaying -eq 1) {
-                
-                Start-Sleep -Seconds $Settings.WaitTime
-                
-                # Znovu načteme aktuální stav procesů pro ukončení launcheru
-                $procsToClose = Get-Process | Where-Object { 
-                    $LauncherList.ContainsKey($_.Name) -and ($_.Company -match $LauncherList[$_.Name])
-                } -ErrorAction SilentlyContinue
-                
-                if ($procsToClose) {
-                    $procsToClose | ForEach-Object { $_.CloseMainWindow() | Out-Null }
-                    Start-Sleep -Seconds 30
-                    $procsToClose | Where-Object { -not $_.HasExited } | Stop-Process -Force -ErrorAction SilentlyContinue
-                }
-                Remove-ItemProperty $regKey -Name "IsPlaying" -ErrorAction SilentlyContinue
+        $val = Get-ItemProperty $regKey -Name "IsPlaying" -ErrorAction SilentlyContinue
+        if ($val -and $val.IsPlaying -eq 1) {
+            
+            Start-Sleep -Seconds $Settings.WaitTime
+            
+            $procsToClose = Get-Process | Where-Object { 
+                $LauncherData.Processes -contains $_.Name -and 
+                ($LauncherData.Companies -contains $_.Company)
+            } -ErrorAction SilentlyContinue
+            
+            if ($procsToClose) {
+                $procsToClose | ForEach-Object { $_.CloseMainWindow() | Out-Null }
+                Start-Sleep -Seconds 30
+                $procsToClose | Where-Object { -not $_.HasExited } | Stop-Process -Force -ErrorAction SilentlyContinue
             }
+            Remove-ItemProperty $regKey -Name "IsPlaying" -ErrorAction SilentlyContinue
         }
     }
 }
 
-# --- 6. VÝKONNOSTNÍ OPTIMALIZACE A SPUŠTĚNÍ ------------------------------------
-# Načteme všechny běžící procesy jednou pro všechny volání funkce
+# --- 6. SPUŠTĚNÍ ---
 $running = Get-Process | Select-Object Name, Company, Description
 
 Watch-Launcher -LauncherName "Ubisoft" -GamesList $ubiGamesList -LauncherList $ubiLauncherDefs -Settings $config.Ubisoft -AllProcesses $running
