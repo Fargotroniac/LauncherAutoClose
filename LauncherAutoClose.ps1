@@ -1,4 +1,4 @@
-# VERSION: 2025.12.28.1950
+# VERSION: 2025.12.28.1937
 # ==============================================================================
 # Launcher Auto Close (LAC)
 # ==============================================================================
@@ -28,7 +28,7 @@ if (-not (Test-Path $configFile)) {
 try {
     $config = Get-Content $configFile -Raw | ConvertFrom-Json
 } catch {
-    $config = $defaultConfig # Nouzový režim při poškození JSONu
+    $config = $defaultConfig 
 }
 
 # --- 3. AUTO-UPDATE SYSTÉM ----------------------------------------------------
@@ -69,35 +69,35 @@ function Try-Update {
     } catch { return $false }
 }
 
-# Kontrola updatu jednou denně
 $today = (Get-Date).ToString("yyyy-MM-dd")
 $lastUpdate = if (Test-Path $updateStamp) { (Get-Content $updateStamp).Trim() } else { "" }
 
 if ($lastUpdate -ne $today) {
     if (Try-Update) {
         Set-Content $updateStamp $today
-        return # Restart při příštím spuštění plánovače s novou verzí
+        return 
     }
     Set-Content $updateStamp $today
 }
 
-# --- 4. DATA: SEZNAMY HER (Zde může být až 2000+ her) -------------------------
-# Udržujeme v hashtable @{} pro bleskové vyhledávání O(1)
+# --- 4. DATA: SEZNAMY HER (Doplněno robotem) -------------------------
 $ubiGamesList = @{
-    "ACU"                  = "Any"
+    "ACU" = "Any"
+    "FarCry6" = "Ubisoft"
+    "WatchDogs" = "Ubisoft"
 }
 
 $blizzGamesList = @{
-    "Diablo IV"           = "Blizzard"
-    "Overwatch"           = "Blizzard"
+
 }
 
 $ubiLauncherDefs   = @{
-    "upc"                    = "Ubisoft"
-    "UbisoftConnect"         = "Ubisoft"
+    "upc"            = "Ubisoft"
+    "UbisoftConnect" = "Ubisoft"
 }
+
 $blizzLauncherDefs = @{
-    "Battle.net"             = "Blizzard"
+    "Battle.net"     = "Blizzard"
 }
 
 # --- 5. HLAVNÍ VÝKONNÁ FUNKCE --------------------------------------------------
@@ -110,10 +110,11 @@ function Watch-Launcher {
         [Object]$AllProcesses
     )
 
-    if (-not $Settings.Enabled) { return }
+    if (-not $Settings.Enabled -or $GamesList.Count -eq 0) { return }
 
     $registryPath = "HKLM:\SOFTWARE\LauncherAutoClose"
     
+    # Detekce hry s využitím tvé logiky (Name + Any/Company/Description)
     $activeGame = $AllProcesses | Where-Object { 
         $GamesList.ContainsKey($_.Name) -and (
             ($GamesList[$_.Name] -eq "Any") -or 
@@ -134,7 +135,6 @@ function Watch-Launcher {
                 
                 Start-Sleep -Seconds $Settings.WaitTime
                 
-                # Znovu načteme aktuální stav procesů pro ukončení launcheru
                 $procsToClose = Get-Process | Where-Object { 
                     $LauncherList.ContainsKey($_.Name) -and ($_.Company -match $LauncherList[$_.Name])
                 } -ErrorAction SilentlyContinue
@@ -150,8 +150,7 @@ function Watch-Launcher {
     }
 }
 
-# --- 6. VÝKONNOSTNÍ OPTIMALIZACE A SPUŠTĚNÍ ------------------------------------
-# Načteme všechny běžící procesy jednou pro všechny volání funkce
+# --- 6. SPUŠTĚNÍ ---
 $running = Get-Process | Select-Object Name, Company, Description
 
 Watch-Launcher -LauncherName "Ubisoft" -GamesList $ubiGamesList -LauncherList $ubiLauncherDefs -Settings $config.Ubisoft -AllProcesses $running
