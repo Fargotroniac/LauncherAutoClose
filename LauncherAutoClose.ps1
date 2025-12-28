@@ -13,7 +13,7 @@ $configFile      = Join-Path $baseDir "config.json"
 $updateStamp     = Join-Path $baseDir "last_update.txt"
 $localScriptPath = $MyInvocation.MyCommand.Path
 $backupPath      = "$localScriptPath.bak"
-$remoteScriptUrl = "https://raw.githubusercontent.com/TVUJ_GITHUB_REPO/main/LauncherAutoClose.ps1"
+$remoteScriptUrl = "https://raw.githubusercontent.com/Fargotroniac/LauncherAutoClose/refs/heads/main/LauncherAutoClose.ps1"
 
 # --- 2. NAČTENÍ / VYTVOŘENÍ KONFIGURACE (JSON) ---------------------------------
 $defaultConfig = @{
@@ -84,19 +84,21 @@ if ($lastUpdate -ne $today) {
 # --- 4. DATA: SEZNAMY HER (Zde může být až 2000+ her) -------------------------
 # Udržujeme v hashtable @{} pro bleskové vyhledávání O(1)
 $ubiGamesList = @{
-    "ACU"          = "Assassin's Creed Unity"
-    "ACValhalla"   = "Ubisoft"
-    "FarCry6"      = "Ubisoft"
-    "TheDivision2" = "Ubisoft"
+    "ACU"                  = "Assassin's Creed Unity"
 }
 
-$blizzGamesList = @{
-    "Diablo IV"    = "Blizzard"
-    "Overwatch"    = "Blizzard"
-}
+#$blizzGamesList = @{
+#    "Diablo IV"           = "Blizzard"
+#    "Overwatch"           = "Blizzard"
+#}
 
-$ubiLauncherDefs   = @{ "upc" = "Ubisoft"; "UbisoftConnect" = "Ubisoft" }
-$blizzLauncherDefs = @{ "Battle.net" = "Blizzard" }
+$ubiLauncherDefs   = @{
+    "upc"                    = "Ubisoft"
+    "UbisoftConnect"         = "Ubisoft"
+}
+#$blizzLauncherDefs = @{
+#    "Battle.net"             = "Blizzard"
+#}
 
 # --- 5. HLAVNÍ VÝKONNÁ FUNKCE --------------------------------------------------
 function Watch-Launcher {
@@ -110,7 +112,7 @@ function Watch-Launcher {
 
     if (-not $Settings.Enabled) { return }
 
-    $registryPath = "HKLM:\SOFTWARE\FargotroniacLauncherClose"
+    $registryPath = "HKLM:\SOFTWARE\LauncherAutoClose"
     
     # Rychlé porovnání s načtenými procesy
     $activeGame = $AllProcesses | Where-Object { 
@@ -153,4 +155,4 @@ function Watch-Launcher {
 $running = Get-Process | Select-Object Name, Company, Description
 
 Watch-Launcher -LauncherName "Ubisoft" -GamesList $ubiGamesList -LauncherList $ubiLauncherDefs -Settings $config.Ubisoft -AllProcesses $running
-Watch-Launcher -LauncherName "Blizzard" -GamesList $blizzGamesList -LauncherList $blizzLauncherDefs -Settings $config.Blizzard -AllProcesses $running
+#Watch-Launcher -LauncherName "Blizzard" -GamesList $blizzGamesList -LauncherList $blizzLauncherDefs -Settings $config.Blizzard -AllProcesses $running
