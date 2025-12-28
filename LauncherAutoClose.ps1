@@ -114,11 +114,14 @@ function Watch-Launcher {
 
     $registryPath = "HKLM:\SOFTWARE\LauncherAutoClose"
     
-    # Rychlé porovnání s načtenými procesy
+# Robustnější detekce (bere v úvahu i chybějící metadata)
     $activeGame = $AllProcesses | Where-Object { 
         $GamesList.ContainsKey($_.Name) -and (
+            # Buď sedí Company/Description
             ($null -ne $_.Company -and $_.Company -match $GamesList[$_.Name]) -or 
-            ($null -ne $_.Description -and $_.Description -match $GamesList[$_.Name])
+            ($null -ne $_.Description -and $_.Description -match $GamesList[$_.Name]) -or
+            # Nebo je v seznamu her nastaveno jen "Any", což znamená "neřeš metadata"
+            ($GamesList[$_.Name] -eq "Any")
         )
     } | Select-Object -First 1
 
