@@ -1,4 +1,4 @@
-# VERSION: 2025.12.28.2040
+# VERSION: 2025.12.28.2050
 # ==============================================================================
 # Launcher Auto Close (LAC)
 # Created by Fargotroniac
@@ -116,6 +116,7 @@ if ($lastUpdate -ne $today) {
 $ubiGamesList = @{
     "ACU" = "Any"
 }
+
 $ubiLauncherData = @{
     Companies = @("Ubisoft", "Ubisoft Entertainment");
     Processes = @("UbisoftConnect", "upc", "UplayWebHelper")
@@ -124,6 +125,7 @@ $ubiLauncherData = @{
 $blizzGamesList = @{
 
 }
+
 $blizzLauncherData = @{
     Companies = @(); Processes = @()
 }
