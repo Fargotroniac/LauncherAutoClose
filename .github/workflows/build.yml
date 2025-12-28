@@ -2,56 +2,62 @@ name: LAC Build Engine
 on:
   push:
     branches: [ work ]
+
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write # Důležité: Povoluje robotovi zapisovat do main
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Process JSON Data
         shell: pwsh
         run: |
-          # 1. Načtení Launcherů (Technické definice)
-          $launchersConfig = Get-Content "data/launchers.json" | ConvertFrom-Json
-          $lLines = @()
-          foreach ($l in $launchersConfig) {
-              $pattern = $l.Companies -join "|"
-              foreach ($p in $l.Processes) { $lLines += "    `"$p`" = `"$pattern`"" }
-          }
-          
-          # 2. Načtení Her (Jeden Master soubor pro vše)
-          $games = Get-Content "data/games.json" | ConvertFrom-Json
-          $gLines = @()
-          foreach ($prop in $games.psobject.Properties) {
-              $gLines += "    `"$($prop.Name)`" = `"$($prop.Value)`""
-          }
+          try {
+              # Načtení Her
+              $games = Get-Content "data/games.json" -Raw | ConvertFrom-Json -ErrorAction Stop
+              $gLines = foreach ($prop in $games.psobject.Properties) {
+                  "    `"$($prop.Name)`" = `"$($prop.Value)`""
+              }
 
-          # 3. Sestavení výsledného skriptu ze šablony
-          if (-not (Test-Path "src/template.ps1")) { throw "Sablona src/template.ps1 nebyla nalezena!" }
-          $template = Get-Content "src/template.ps1" -Raw
-          
-          # Vložení dat do značek v šabloně
-          $template = $template.Replace("#INSERT_LAUNCHERS#", ($lLines -join "`r`n"))
-          $template = $template.Replace("#INSERT_GAMES#", ($gLines -join "`r`n"))
-          
-          # Automatická aktualizace verze podle času sestavení
-          $v = Get-Date -Format "yyyy.MM.dd.HHmm"
-          $template = $template -replace '0.0.0.0', $v
-          
-          # Uložení hotového skriptu
-          $template | Set-Content "LauncherAutoClose.ps1" -Encoding utf8
+              # Načtení Launcherů
+              $launchers = Get-Content "data/launchers.json" -Raw | ConvertFrom-Json -ErrorAction Stop
+              $lLines = foreach ($l in $launchers) {
+                  $pattern = $l.Companies -join "|"
+                  foreach ($p in $l.Processes) { "    `"$p`" = `"$pattern`"" }
+              }
+
+              # Sestavení
+              $template = Get-Content "src/template.ps1" -Raw -ErrorAction Stop
+              $template = $template.Replace("#INSERT_LAUNCHERS#", ($lLines -join "`r`n"))
+              $template = $template.Replace("#INSERT_GAMES#", ($gLines -join "`r`n"))
+              
+              $v = Get-Date -Format "yyyy.MM.dd.HHmm"
+              $template = $template -replace '0.0.0.0', $v
+              
+              $template | Set-Content "LauncherAutoClose.ps1" -Encoding utf8
+              Write-Host "Sestaveni probehlo uspesne pro verzi $v"
+          }
+          catch {
+              Write-Error "CHYBA: Pravdepodobne mas chybu v JSONu (chybejici uvozovky nebo carka navic)."
+              Write-Error $_.Exception.Message
+              exit 1
+          }
 
       - name: Deploy to Main
         shell: pwsh
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          git fetch origin main
-          git checkout main
           
-          # Překopírování vygenerovaného skriptu a jeho odeslání do main
-          mv LauncherAutoClose.ps1 LauncherAutoClose.ps1 -Force
+          # Prepnutí do main a vložení souboru
+          git checkout main
+          git checkout work -- LauncherAutoClose.ps1
+          
           git add LauncherAutoClose.ps1
-          git commit -m "Automated build $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+          git commit -m "Auto-build $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
           git push origin main
