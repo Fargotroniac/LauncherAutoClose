@@ -1,4 +1,4 @@
-# VERSION: 2025.12.28.2050
+# VERSION: 2025.12.28.2105
 # ==============================================================================
 # Launcher Auto Close (LAC)
 # Created by Fargotroniac
@@ -11,15 +11,15 @@ if (-not (Test-Path $baseDir)) {
 }
 
 $configFile      = Join-Path $baseDir "config.json"
-$updateStamp     = Join-Path $baseDir "last_update.txt"
+$updateStamp     = Join-Path $baseDir "last_update_time.txt"
 $localScriptPath = $MyInvocation.MyCommand.Path
 $backupPath      = "$localScriptPath.bak"
-$remoteScriptUrl = "https://raw.githubusercontent.com/Fargotroniac/LauncherAutoClose/main/LauncherAutoClose.ps1"
 
 # --- 2. NAČTENÍ / VYTVOŘENÍ KONFIGURACE (JSON) ---------------------------------
 $defaultConfig = @{
-    Ubisoft  = @{ Enabled = $true;  WaitTime = 90 }
-    Blizzard = @{ Enabled = $true;  WaitTime = 90 }
+    Ubisoft  = @{ Enabled = $true; WaitTime = 90 }
+    Blizzard = @{ Enabled = $true; WaitTime = 90 }
+    Update   = @{ Beta = $false }
 }
 
 if (-not (Test-Path $configFile)) {
@@ -28,53 +28,42 @@ if (-not (Test-Path $configFile)) {
 
 try {
     $config = Get-Content $configFile -Raw | ConvertFrom-Json
+    if (-not $config.Update) { 
+        $config | Add-Member -MemberType NoteProperty -Name "Update" -Value $defaultConfig.Update 
+    }
 } catch {
     $config = $defaultConfig 
 }
 
 # --- 3. AUTO-UPDATE SYSTÉM ----------------------------------------------------
+
+# Nastavení kanálu a intervalu
+if ($config.Update.Beta) {
+    $branch = "beta"
+    $intervalHours = 1
+} else {
+    $branch = "main"
+    $intervalHours = 24 
+}
+
+$remoteScriptUrl = "https://raw.githubusercontent.com/Fargotroniac/LauncherAutoClose/$branch/LauncherAutoClose.ps1"
+
 function Validate-ScriptContent {
-    param(
-        [string]$content
-    )
-
-    # 1) Základní kontrola
-    if (-not $content) { return $false }
-    if ($content.Length -lt 3000) { return $false }
-
-    # 2) Kontrola HTML (Zůstává stejná)
+    param([string]$content)
+    if (-not $content -or $content.Length -lt 3000) { return $false }
     if ($content -match "<html" -or $content -match "<body" -or $content -match "<!DOCTYPE html") { return $false }
-
-    # 3) Kontrola verze
+    
     $versionLine = ($content -split "`r?`n") | Where-Object { $_ -match "^# VERSION:" }
-    if (-not $versionLine) { return $false }
-    if ($versionLine -notmatch "^# VERSION:\s\d{4}\.\d{2}\.\d{2}\.\d{4}$") { return $false }
-
-    # 4) Kontrola funkcí
-    if ($content -notmatch "Try-Update") { return $false }
-    if ($content -notmatch "Validate-ScriptContent") { return $false }
-    if ($content -notmatch "Get-VersionFromContent") { return $false }
-
-    # 5) Kontrola hlavní funkce
-    if ($content -notmatch "function\s+Watch-Launcher") { return $false }
-
-    # 6) Kontrola seznamů
-    if ($content -notmatch "\$ubiGamesList") { return $false }
-
-    # 7) Kontrola spouštění
-    if ($content -notmatch "Watch-Launcher") { return $false }
-
-    # 8) Kontrola configu
-    if ($content -notmatch "\$configFile") { return $false }
-    if ($content -notmatch "ConvertFrom-Json") { return $false }
-
+    if (-not $versionLine -or $versionLine -notmatch "^# VERSION:\s\d{4}\.\d{2}\.\d{2}\.\d{4}$") { return $false }
+    
+    if ($content -notmatch "Try-Update" -or $content -notmatch "function\s+Watch-Launcher") { return $false }
+    if ($content -notmatch "\$ubiGamesList" -or $content -notmatch "\$configFile") { return $false }
     return $true
 }
 
 function Get-VersionFromContent {
     param([string]$content)
-    $lines = $content -split "`r?`n"
-    $line  = $lines | Where-Object { $_ -like '# VERSION:*' }
+    $line = ($content -split "`r?`n") | Where-Object { $_ -like '# VERSION:*' }
     if (-not $line) { return $null }
     return $line.Replace('# VERSION:', '').Trim()
 }
@@ -101,15 +90,26 @@ function Try-Update {
     } catch { return $false }
 }
 
-$today = (Get-Date).ToString("yyyy-MM-dd")
-$lastUpdate = if (Test-Path $updateStamp) { (Get-Content $updateStamp).Trim() } else { "" }
+$shouldUpdate = $false
+$now = Get-Date
 
-if ($lastUpdate -ne $today) {
-    if (Try-Update) {
-        Set-Content $updateStamp $today
-        return 
+if (-not (Test-Path $updateStamp)) {
+    $shouldUpdate = $true
+} else {
+    $lastDateStr = (Get-Content $updateStamp).Trim()
+    if ([DateTime]::TryParse($lastDateStr, [ref]$lastUpdate)) {
+        if ($now -gt $lastDate.AddHours($intervalHours)) {
+            $shouldUpdate = $true
+        }
+    } else {
+        $shouldUpdate = $true
     }
-    Set-Content $updateStamp $today
+}
+
+if ($shouldUpdate) {
+    $updateResult = Try-Update
+    $now.ToString("yyyy-MM-dd HH:mm:ss") | Set-Content $updateStamp
+    if ($updateResult) { return }
 }
 
 # --- 4. DATA -------------------------
@@ -130,7 +130,7 @@ $blizzLauncherData = @{
     Companies = @(); Processes = @()
 }
 
-# --- 5. FUNKCE -----------------------
+# --- 5. FUNKCE ------------------------------------
 function Watch-Launcher {
     param (
         [string]$LauncherName,
@@ -163,7 +163,7 @@ function Watch-Launcher {
             
             Start-Sleep -Seconds $Settings.WaitTime
             
-            # Kontrola procesů launcheru (Nová logika Companies/Processes)
+            # Kontrola procesů launcheru
             $procsToClose = Get-Process | Where-Object { 
                 $LData.Processes -contains $_.Name -and 
                 ($null -ne $_.Company -and ($LData.Companies -contains $_.Company))
