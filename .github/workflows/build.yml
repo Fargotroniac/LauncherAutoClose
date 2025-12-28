@@ -7,14 +7,14 @@ jobs:
   build:
     runs-on: windows-latest
     permissions:
-      contents: write # Důležité: Povoluje robotovi zapisovat do main
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-- name: Process JSON Data
+      - name: Process JSON Data
         shell: pwsh
         run: |
           try {
@@ -41,6 +41,7 @@ jobs:
               }
 
               # 4. Sestavení výsledného skriptu
+              if (-not (Test-Path "src/template.ps1")) { throw "Sablona src/template.ps1 nebyla nalezena!" }
               $template = Get-Content "src/template.ps1" -Raw -ErrorAction Stop
               $template = $template.Replace("#INSERT_LAUNCHERS#", ($lLines -join "`r`n"))
               $template = $template.Replace("#INSERT_UBI_GAMES#", ($ubiLines -join "`r`n"))
@@ -61,17 +62,18 @@ jobs:
       - name: Deploy to Main
         shell: pwsh
         run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
+          git config --global user.name "Fargotroniac"
+          git config --global user.email "Fargotroniac@icloud.com"
           
           # 1. Uložíme si vygenerovaný skript do dočasné paměti
+          if (-not (Test-Path "LauncherAutoClose.ps1")) { throw "Vystupni soubor nebyl vytvoren!" }
           $generatedScript = Get-Content "LauncherAutoClose.ps1" -Raw
           
-          # 2. Přepneme se do main (a vynutíme si to)
+          # 2. Přepneme se do main
           git fetch origin main
           git checkout main -f
           
-          # 3. Vložíme tam ten nový skript (přepíšeme starý)
+          # 3. Vložíme tam ten nový skript
           $generatedScript | Set-Content "LauncherAutoClose.ps1" -Encoding utf8
           
           # 4. Odešleme změny
