@@ -1,4 +1,4 @@
-# VERSION: 2025.12.28.1047
+# VERSION: 2025.12.28.1048
 # Tento skript je generován automaticky z větvě develop. Neupravujte jej přímo v main.
 
 # --- 1. ZÁKLADNÍ CESTY A PŘÍPRAVA ----------------------------------------------
